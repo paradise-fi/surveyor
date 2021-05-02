@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+a {
+  @apply underline text-blue-500 hover:text-blue-800;
+}
+
+h1 {
+  @apply text-2xl;
+}
+
+h2 {
+  @apply text-xl;
+}
+
+h3 {
+  @apply text-lg;
+}
+
+.react-syntax-highlighter-line-number {
+  @apply pr-1 mr-2 border-gray-500 border-r-2 text-right text-gray-400;
+  width: 40px;
+}
