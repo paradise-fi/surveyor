@@ -1,8 +1,8 @@
 """empty message
 
-Revision ID: 6e83ce29421f
+Revision ID: c7cd9bceb708
 Revises: 
-Create Date: 2021-04-22 13:10:32.026975
+Create Date: 2021-04-27 09:54:45.753177
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '6e83ce29421f'
+revision = 'c7cd9bceb708'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -34,7 +34,6 @@ def upgrade():
     sa.Column('assignee', sa.String(length=100), nullable=True),
     sa.Column('exitcode', sa.Integer(), nullable=True),
     sa.Column('output', sa.Text(), nullable=True),
-    sa.Column('time', sa.BIGINT(), nullable=True),
     sa.Column('stats', sa.JSON(), nullable=True),
     sa.Column('result', sa.JSON(), nullable=True),
     sa.ForeignKeyConstraint(['suite_id'], ['benchmark_suite.id'], ),
@@ -47,7 +46,8 @@ def upgrade():
     sa.Column('dockerfile', sa.Text(), nullable=True),
     sa.Column('cpuLimit', sa.Integer(), nullable=True),
     sa.Column('memoryLimit', sa.Integer(), nullable=True),
-    sa.Column('timeLimit', sa.Integer(), nullable=True),
+    sa.Column('cpuTimeLimit', sa.Integer(), nullable=True),
+    sa.Column('wallClockTimeLimit', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['suite_id'], ['benchmark_suite.id'], ),
     sa.PrimaryKeyConstraint('id')
     )

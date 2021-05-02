@@ -9,3 +9,4 @@ migrate = Migrate(app, db)
 
 from surveyor.admin_cli import *
 from surveyor import models
+from surveyor import api

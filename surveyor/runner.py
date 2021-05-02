@@ -23,6 +23,8 @@ from urllib3.exceptions import ReadTimeoutError
 from surveyor import app, db
 from surveyor.models import BenchmarkTask
 from surveyor.common import withCleanup, asFuture
+from surveyor import podman
+from surveyor.podman import Cgroup
 
 def installedPhysicalMemory():
     return os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES')
@@ -33,29 +35,11 @@ class NotEnoughResources(RuntimeError):
 class EnvironmentBuildError(RuntimeError):
     pass
 
-@contextmanager
-def podmanApiEndpoint():
-    """
-    Run podman API endpoint process as a context
-    """
-    with TemporaryDirectory() as d:
-        socket = os.path.join(d, "podman.sock")
-        try:
-            proc = Popen(["podman", "system", "service", "-t0", "unix://" + socket],
-                stdout=PIPE, stderr=PIPE)
-            # We have no way to find out if the process failed after we yield,
-            # so wait a second to find if it was executed correctly or not.
-            stdout, stderr = proc.communicate(timeout=1)
-            # If we get here, something is wrong; raise exception
-            RuntimeError(f"Cannot start podman API process: {stdout}\n{stderr}")
-        except OSError as e:
-            RuntimeError(f"Cannot start podman API process - do you have podman "
-                         f" installed?\n\n {e}")
-        except TimeoutExpired:
-            # Podman process is running!
-            yield socket
-        finally:
-            proc.kill()
+class TaskRunError(RuntimeError):
+    pass
+
+class ArtefactError(RuntimeError):
+    pass
 
 class ResourceManager:
     def __init__(self, **kwargs):
@@ -82,8 +66,7 @@ class ResourceManager:
                     self.availableResources[r] += v
 
 class EnvironmentManager:
-    def __init__(self, podmansocket):
-        self.client = PodmanClient("unix://" + podmansocket)
+    def __init__(self):
         self.mutex = RLock()
         self.buildInProgress = {} # env.id -> mutex
         self.builder = ThreadPoolExecutor(max_workers=3)
@@ -93,12 +76,6 @@ class EnvironmentManager:
 
     def __exit__(self, *args, **kwargs):
         return self.builder.__exit__(*args, **kwargs)
-
-    def printPodmanInfo(self):
-        version = self.client.version()
-        print("Release: ", version["Version"])
-        print("Compatible API: ", version["ApiVersion"])
-        print("Podman API: ", version["Components"][0]["Details"]["APIVersion"], "\n")
 
     @staticmethod
     def _envName(env):
@@ -110,10 +87,11 @@ class EnvironmentManager:
         # cached
         m = hashlib.sha256()
         m.update(env.dockerfile.encode(encoding="UTF-8"))
+        return f"surveyor-env-{m.hexdigest()}"
         return f"surveyor-env-{env.id}-{m.hexdigest()[:8]}"
 
     def _isEnvAvailable(self, envName):
-        return self.client.images.exists(f"localhost/{envName}")
+        return podman.imageExists(f"localhost/{envName}")
 
     def _buildContainer(self, env):
         """
@@ -122,16 +100,12 @@ class EnvironmentManager:
         """
         envName = self._envName(env)
         try:
-            _, buildLog = self.client.images.build(
-                fileobj=io.StringIO(env.dockerfile),
-                tag=envName,
-                timeout=3600,
-                buildargs={x.key: x.value for x in env.params}
-                # TBA: Container build limits
-            )
-        except (BuildError, APIError, TypeError) as e:
+            buildLog = podman.buildImage(dockerfile=env.dockerfile, tag=envName,
+                args={x.key: x.value for x in env.params},
+                cpuLimit=env.cpuLimit, memLimit=env.memoryLimit)
+        except podman.PodmanError as e:
             raise EnvironmentBuildError(
-                f"Build of environment {env.id} ({env.description}) has failed with: {e}")
+                f"Build of environment {env.id} ({env.description}) has failed with:\n{e.log}\n\n{e}")
         finally:
             with self.mutex:
                 condition = self.buildInProgress[env.id]
@@ -176,25 +150,6 @@ def localDbSession():
     finally:
         session.remove()
 
-def inspectContainer(container):
-    """
-    Return a dictionary of container inspection result. This is a substition for
-    the missing functionality in podman-py.
-    """
-    command = ["podman", "container", "inspect", "--format", "json", container.name]
-    res = subprocess.run(command, capture_output=True, check=True)
-    return json.loads(res.stdout)[0]
-
-def containerRunTime(inspection):
-    """
-    Return container runtime in microseconds
-    """
-    started = dateutil.parser.parse(inspection["State"]["StartedAt"])
-    finished = dateutil.parser.parse(inspection["State"]["FinishedAt"])
-    delta = finished - started
-    return delta.seconds * 1000000 + delta.microseconds
-
-
 def obtainEnvironment(task, envManager):
     """
     Return an image name for running given task. If needed, build one.
@@ -209,13 +164,6 @@ def obtainEnvironment(task, envManager):
             dbSession.commit()
     return envImageF.result()
 
-def containerOutput(container):
-    """
-    Return container stdout and stderr as string
-    """
-    lines = [x.decode("utf-8") for x in container.logs(stdout=True, stderr=True)]
-    return "\n".join(lines)
-
 def extractArtefact(path):
     """
     Extracts benchmark artefact from the path.
@@ -224,51 +172,73 @@ def extractArtefact(path):
         with open(os.path.join(path, "results.json")) as f:
             return json.load(f)
     except FileNotFoundError:
-        return {}
+        raise ArtefactError("No artefact file found")
+    except json.JSONDecodeError as e:
+        with open(os.path.join(path, "results.json")) as f:
+            raise ArtefactError(f"Ivanlid syntax: {e}.\n\nSource file:\n{f.read()}")
 
-def executeTask(task, imageName, podmanEnd):
+def createContainerName(task):
+    containerName = f"surveyor-task-{task.id}"
+    if podman.containerExists(containerName):
+        # There is a dangling container...
+        suffix = 1
+        while podman.containerExists(f"{containerName}-{suffix}"):
+            suffix += 1
+        containerName = f"{containerName}-{suffix}"
+    return containerName
+
+def executeTask(task, imageName, parentCgroup):
     """
     Given a benchmarking task, run it in given container. Updates "updatedAt"
     field on the model and stores benchmarking results to the model.
     """
     dbSession = SignallingSession.object_session(task)
-    with PodmanClient("unix://" + podmanEnd) as client, TemporaryDirectory() as d:
+    with TemporaryDirectory() as d, parentCgroup.newGroup(f"task{task.id}") as cgroup:
         print("Starting container...")
+        env = task.suite.env
         buildOutput = "" if task.output is None else task.output
-        container = client.containers.create(
-            image=imageName, command=shlex.split(task.command),
-            mounts=[{
-                "type": "bind",
-                "target": "/artefact",
-                "source": d
-                # TBA resource limits
-            }])
-        container.start()
-
-        running = True
-        while running:
-            try:
-                y = container.wait(timeout=5)
-                running = False
-            except ReadTimeoutError:
-                output = containerOutput(container)
-                print("Current output: " + output)
-                task.poke(buildOutput + output)
+        try:
+            container = podman.createContainer(
+                image=imageName, command=shlex.split(task.command),
+                mounts=[{
+                    "target": "/artefact",
+                    "source": d
+                }],
+                cpuLimit=env.cpuLimit, memLimit=env.memoryLimit,
+                cgroup=cgroup, name=createContainerName(task))
+            print("Container created")
+            def notify():
+                task.poke(podman.containerLogs(container))
                 dbSession.commit()
+            stats = podman.runAndWatch(
+                container, cgroup, notify, env.wallClockTimeLimit, env.cpuTimeLimit)
+        except podman.PodmanError as e:
+            raise TaskRunError(f"Cannot execute task: {e.log} \n\nCommand: {e}")
+        finally:
+            if container is not None:
+                podman.removeContainer(container)
 
-        output = buildOutput + containerOutput(container)
-        inspection = inspectContainer(container)
-        exitcode = inspection["State"]["ExitCode"]
-        runtime = containerRunTime(inspection)
-        stats = {
-            "oomKilled": inspection["State"]["OOMKilled"]
+        exitcode = stats["exitCode"]
+        dbStats = {
+            "cpuTime": stats["cpuStat"]["usage_usec"],
+            "wallTime": stats["wallTime"],
+            "userTime": stats["cpuStat"]["user_usec"],
+            "systemTime": stats["cpuStat"]["system_usec"],
+            "outOfMemory": stats["outOfMemory"],
+            "timeout": stats["timeout"],
+            "memUsage": stats["memStat"], # TBA
+            "artefactError": None
         }
-        result = extractArtefact(d)
+        try:
+            artefact = extractArtefact(d)
+        except ArtefactError as e:
+            dbStats["artefactError"] = str(e)
+            artefact = None
 
-        task.finish(exitcode, output, runtime, stats, result)
+        task.finish(exitcode, stats["output"], dbStats, artefact)
         dbSession.commit()
 
-def evaluateTask(taskId, envManager, podmanEndpoint):
+def evaluateTask(taskId, envManager, cgroup):
     """
     Given a BenchmarkTask id evaluate it.
     """
@@ -276,10 +246,10 @@ def evaluateTask(taskId, envManager, podmanEndpoint):
         try:
             task = dbSession.query(BenchmarkTask).get(taskId)
             envImage = obtainEnvironment(task, envManager)
-            executeTask(task, envImage, podmanEndpoint)
+            executeTask(task, envImage, cgroup)
             dbSession.commit()
-        except EnvironmentBuildError as e:
-            task.finish(1, str(e), None, None, None)
+        except (EnvironmentBuildError, TaskRunError) as e:
+            task.finish(1, str(e), None, None)
         except Exception as e:
             task.abandon()
             raise e
@@ -300,44 +270,46 @@ def run(cpulimit, memlimit, joblimit, id):
     """
     Run executor daemon
     """
-    with podmanApiEndpoint() as podmanEndpoint:
-        resources = ResourceManager(job=joblimit, cpu=cpulimit, mem=memlimit)
-        envManager = EnvironmentManager(podmanEndpoint)
-        with envManager:
-            while True:
-                if resources.availableResources["job"] == 0:
-                    time.sleep(1)
-                    continue
-                task = BenchmarkTask.fetchNew(
-                    resources.availableResources["cpu"],
-                    resources.availableResources["mem"])
-                if task is None:
-                    db.session.commit()
-                    print(f"No tasks available, sleeping")
-                    time.sleep(1)
-                    continue
-                print(f"Fetched new task {task.id}")
-                try:
-                    task.acquire(id)
-                    print(f"Task {task.id} acquired")
-                    db.session.commit()
-                except:
-                    db.session.rollback()
-                    raise
-                try:
-                    env = task.suite.env
-                    resourcesHandle = resources.capture(
-                        cpu=env.cpuLimit, mem=env.memoryLimit, job=1)
-                    resourcesHandle.__enter__()
-                    t = Thread(
-                        target=withCleanup(evaluateTask, resourcesHandle.__exit__),
-                        args=[task.id, envManager, podmanEndpoint])
-                    t.start()
-                except:
-                    task.abandon()
-                    db.session.commit()
-                    resourcesHandle.__exit__(*sys.exc_info())
-                    raise
+    cgroup = Cgroup.createScope("surveyor_runner")
+    cgroup.enableControllers(["cpu", "memory", "io"])
+
+    resources = ResourceManager(job=joblimit, cpu=cpulimit, mem=memlimit)
+    envManager = EnvironmentManager()
+    with envManager:
+        while True:
+            if resources.availableResources["job"] == 0:
+                time.sleep(1)
+                continue
+            task = BenchmarkTask.fetchNew(
+                resources.availableResources["cpu"],
+                resources.availableResources["mem"])
+            if task is None:
+                db.session.commit()
+                print(f"No tasks available, sleeping")
+                time.sleep(1)
+                continue
+            print(f"Fetched new task {task.id}")
+            try:
+                task.acquire(id)
+                print(f"Task {task.id} acquired")
+                db.session.commit()
+            except:
+                db.session.rollback()
+                raise
+            try:
+                env = task.suite.env
+                resourcesHandle = resources.capture(
+                    cpu=env.cpuLimit, mem=env.memoryLimit, job=1)
+                resourcesHandle.__enter__()
+                t = Thread(
+                    target=withCleanup(evaluateTask, resourcesHandle.__exit__),
+                    args=[task.id, envManager, cgroup])
+                t.start()
+            except:
+                task.abandon()
+                db.session.commit()
+                resourcesHandle.__exit__(*sys.exc_info())
+                raise
 
 @app.cli.command("gc")
 def gc():

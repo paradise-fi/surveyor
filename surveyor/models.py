@@ -9,6 +9,12 @@ class BenchmarkSuite(db.Model):
     env = db.relationship("RuntimeEnv", back_populates="suite", uselist=False)
     tasks = db.relationship("BenchmarkTask", back_populates="suite", lazy=False)
 
+    def completedTaskCount(self):
+        return sum(x.state in [TaskState.evaluated, TaskState.cancelled] for x in self.tasks)
+
+    def assignedTaskCount(self):
+        return sum(x.state == TaskState.assigned for x in self.tasks)
+
 class RuntimeEnv(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     suite_id = db.Column(db.Integer, db.ForeignKey("benchmark_suite.id"),
@@ -19,7 +25,8 @@ class RuntimeEnv(db.Model):
     params = db.relationship("RuntimeParam", back_populates="env", lazy="joined")
     cpuLimit = db.Column(db.Integer)
     memoryLimit = db.Column(db.Integer)
-    timeLimit = db.Column(db.Integer)
+    cpuTimeLimit = db.Column(db.Integer)
+    wallClockTimeLimit = db.Column(db.Integer)
 
 class RuntimeParam(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -53,9 +60,7 @@ class BenchmarkTask(db.Model):
     exitcode = db.Column(db.Integer, default=None)
     # Combination of stdout & stderr
     output = db.deferred(db.Column(db.Text, default=None))
-    # Time of the actual execution time in microsends
-    time = db.Column(db.BIGINT, default=None)
-    # Statistics collected by the runner, to be implemented in the future
+    # Statistics collected by the runner
     stats = db.Column(db.JSON, default=None)
     # The JSON object produced by the evaluation task
     result = db.Column(db.JSON, default=None)
@@ -102,14 +107,13 @@ class BenchmarkTask(db.Model):
         self.updatedAt = datetime.utcnow()
         self.output = output
 
-    def finish(self, exitcode, output, time, stats, result):
+    def finish(self, exitcode, output, stats, result):
         """
         Sucessfully finish evaluation of the task
         """
         self.state = TaskState.evaluated
         self.exitcode = exitcode
         self.output = output
-        self.time = time
         self.stats = stats
         self.result = result
 

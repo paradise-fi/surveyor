@@ -40,25 +40,28 @@ def validateTimeout(ctx, param, value):
     help="Docker ARGs passed to Dockerfile")
 @click.option("--tasks", type=click.File(), required=True,
     help="JSON file specifying benchmarking tasks")
-@click.option("--cpulimit", "-c", type=int, callback=validateCpuLimit, default=1,
+@click.option("--cpulimit", type=int, callback=validateCpuLimit, default=1,
     help="Set single task cpu cores limit")
-@click.option("--timeout", "-t", type=int, callback=validateTimeout, default=3600,
-    help="Set single task timeout in seconds")
-@click.option("--memlimit", "-m", type=int, callback=validateMemLimit, default=1024*1024*1024,
+@click.option("--ctimeout", type=int, callback=validateTimeout, default=3600,
+    help="Set single task cpu timeout in seconds")
+@click.option("--wtimeout", type=int, callback=validateTimeout, default=3600,
+    help="Set single task wall clock timeout in seconds")
+@click.option("--memlimit", type=int, callback=validateMemLimit, default=1024*1024*1024,
     help="Set single task memory limit (in bytes)")
 @click.option("--description", "-d", type=str, required=True,
     help="Evaluation suite description")
 @click.option("--run/--no-run", "-r", default=False)
-def createSuite(dockerfile, param, tasks, cpulimit, memlimit, timeout, description, run):
+def createSuite(dockerfile, param, tasks, cpulimit, memlimit, ctimeout, wtimeout,
+                description, run):
     """
     Specify new evaluation suite and start evaluating it.
     """
-    # TBA: Try to build the image, notify user if error occurs
     suite = BenchmarkSuite(author=getUsername())
     suite.env = RuntimeEnv(
         description=description,
         dockerfile=dockerfile.read(),
-        timeLimit=timeout,
+        cpuTimeLimit=ctimeout,
+        wallClockTimeLimit=wtimeout,
         cpuLimit=cpulimit,
         memoryLimit=memlimit)
     for key, value in param:

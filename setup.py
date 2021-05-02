@@ -30,7 +30,8 @@ setuptools.setup(
         "Flask-SQLAlchemy",
         "Flask-Migrate",
         "podman-py",
-        "python-dateutil"
+        "python-dateutil",
+        "dbus-python"
     ],
     entry_points = {
         "console_scripts": [
