@@ -164,7 +164,7 @@ def buildImage(dockerfile, tag, args, cpuLimit=None, memLimit=None):
             command.extend(["--memory", str(memLimit)])
         if cpuLimit is not None:
             command.extend(["--cpu-period", "100000"])
-            command.extend(["--cpu_quota", str(100000 * cpuLimit)])
+            command.extend(["--cpu-quota", str(100000 * cpuLimit)])
         command.extend(["-f", dockerfilePath])
         command.append(d)
 

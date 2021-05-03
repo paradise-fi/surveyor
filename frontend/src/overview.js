@@ -144,6 +144,7 @@ function BenchamarkEnv(props) {
 function SuiteStatistics(props) {
     let suite = props.suite;
     return <div className="w-full">
+        <p>Status: {suiteResultText(suite)}</p>
         <a href={"/api/suites/" + suite.id + "/results"} target="_blank" rel="noreferrer">
             <Button className="w-full">
                 Download JSON summary of suite: {suite.id}
@@ -171,7 +172,6 @@ class EntityDetail extends React.Component {
     handleUpdate = response => {
         response
             .then(entity => {
-                console.log(entity);
                 this.setState({"entity": entity, "message": undefined});
             })
             .catch(e => {
@@ -325,7 +325,7 @@ class SuiteDetail extends EntityDetail {
     renderEntity(suite) {
         return <div className="w-full p-3 pl-16 border-black border-l-4">
             <h3 className="font-bold">
-                Benchmark suite {suite.id}
+                BencsuiteResultTexthmark suite {suite.id}
             </h3>
             <p className="w-full border-b-2 border-gray">
                 {suite.description}
@@ -348,6 +348,29 @@ class SuiteDetail extends EntityDetail {
             </div>
         </div>
     }
+}
+
+function suiteResultText(suite) {
+    var totalCount = 0;
+    var successCount = 0;
+    var failCount = 0;
+    for (var tIdx in suite.tasks) {
+        let task = suite.tasks[tIdx];
+        totalCount += 1;
+        if (task.exitcode != null && task.exitcode === 0)
+            successCount += 1;
+        else if (task.exitcode != null)
+            failCount += 1;
+    }
+
+    console.log(totalCount, successCount, failCount)
+    let prefix = failCount === 0 ? "✅" : "❌";
+    if (successCount + failCount !== totalCount)
+        return prefix + " In progress";
+    if (successCount === totalCount)
+        return "✅ Success";
+    if (failCount !== 0)
+        return "❌ Failed";
 }
 
 function SuiteTable(props) {

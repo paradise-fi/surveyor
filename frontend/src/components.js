@@ -25,7 +25,6 @@ export function InlineSpinbox(props) {
 
 export function timeLimitString(timelimit) {
     // Give a time limit in seconds, format it as string
-    console.log(timelimit)
     if (timelimit === undefined || timelimit === null || isNaN(timelimit))
         return "N/A"
     if (timelimit < 1) {
@@ -67,48 +66,8 @@ export function memLimitString(bytes) {
 
 export function Button(props) {
     let {className, ...otherProps} = props;
-    return <button className={"bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded " + className}
+    return <button className={"bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed " + className}
             {...otherProps}>
         {props.children}
     </button>
 }
-
-// class FileButton extends React.Component {
-//     constructor(props) {
-//         super(props)
-//         this.state = { "activated": false };
-//     }
-
-//     handleClick = () => {
-//         this.setState({"activated": true});
-//         fetch(props.path)
-//             .then(response => {
-//                 if (!response.ok) {
-//                     throw new Error(response.statusText);
-//                 }
-//                 if (response.status !== 200) {
-//                     return response.text().then( text => {
-//                         throw new Error(`Response: ${response.status}: ${text}`);
-//                     });
-//                 }
-//                 const element = document.createElement("a");
-//                 const file = new Blob([await response.text],
-//                     {type: 'text/plain;charset=utf-8'});
-//    element.href = URL.createObjectURL(file);
-//    element.download = "myFile.txt";
-//    document.body.appendChild(element);
-//    element.click();
-//             })
-
-//     }
-
-//     render() {
-//         let {children, path, ...otherProps} = this.props;
-//         return <Button {...otherProps} onClick={this.handleClick}>
-//             {
-//                 this.state.activated ? <InlineSpinbox/> : <></>
-//             }
-//             { this.props.children }
-//         </Button>
-//     }
-// }

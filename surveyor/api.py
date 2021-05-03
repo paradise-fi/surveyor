@@ -1,5 +1,6 @@
 from surveyor import app, db
 from surveyor.models import *
+from flask import request
 
 def serializeSuiteOverview(suite):
     return {
@@ -65,7 +66,12 @@ def serializeEnv(env):
         "wallClockTimeLimit": env.wallClockTimeLimit
     }
 
-@app.route("/api/suites")
+@app.route("/api/suites", methods=["GET", "POST"])
+def suites_endpoint():
+    if request.method == "POST":
+        return new_suite()
+    return get_suites()
+
 def get_suites():
     suites = db.session.query(BenchmarkSuite).order_by(BenchmarkSuite.created.desc()).all()
     return {
@@ -73,6 +79,34 @@ def get_suites():
         "end": len(suites),
         "suites": [serializeSuiteOverview(x) for x in suites]
     }
+
+def new_suite():
+    data = request.get_json()
+    username = request.environ.get("AUTH_USER", "web")
+    if data is None:
+        return "Invalid data", 400
+    try:
+        suite = BenchmarkSuite(author=username)
+        suite.env = RuntimeEnv(
+            description=data["description"],
+            dockerfile=data["dockerfile"],
+            cpuTimeLimit=data["cputimelimit"],
+            wallClockTimeLimit=data["walltimelimit"],
+            cpuLimit=data["cpulimit"],
+            memoryLimit=data["memorylimit"])
+        # TBA Params
+        for t in data["tasks"]:
+            if not isinstance(t, str):
+                raise RuntimeError(f"Task is supposed to be string, got {type(t)} instead: '{t}'")
+            suite.tasks.append(BenchmarkTask(command=t, state=TaskState.pending))
+        db.session.add(suite)
+        db.session.commit()
+        return {
+            "id": suite.id
+        }
+    except Exception as e:
+        db.session.abort()
+        return str(e), 400
 
 @app.route("/api/suites/<id>")
 def get_suite(id):

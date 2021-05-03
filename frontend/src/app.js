@@ -19,18 +19,18 @@ function Header(props) {
 }
 
 function Navbar(props) {
-    return <div className="w-ful text-lg">
-    <NavLink to="/" exact={true}
-        className="inline-block p-4 bg-white"
-        activeClassName="bg-gray-200 font-bold">
-        Overview
-    </NavLink>
-    <NavLink to="/new"
-        className="inline-block p-4 bg-white"
-        activeClassName="bg-gray-200 font-bold">
-        Submit a new benchmarking task
-    </NavLink>
-  </div>
+    return <div className="w-ful text-lg border-b-4 border-gray-200 mb-4">
+        <NavLink to="/" exact={true}
+            className="inline-block p-4 bg-white no-underline"
+            activeClassName="bg-gray-200 font-bold">
+            Overview
+        </NavLink>
+        <NavLink to="/new"
+            className="inline-block p-4 bg-white no-underline"
+            activeClassName="bg-gray-200 font-bold">
+            Submit a new benchmarking task
+        </NavLink>
+    </div>
 }
 
 function Footer(props) {
