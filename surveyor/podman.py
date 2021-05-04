@@ -10,7 +10,8 @@ import dbus
 from tempfile import TemporaryDirectory
 
 # See https://github.com/containers/podman/issues/10173
-CGROUP_WORKAROUND = True
+CGROUP_WORKAROUND = False
+RUNTIME = "runc"
 
 
 proxy = dbus.SystemBus().get_object("org.freedesktop.systemd1", "/org/freedesktop/systemd1")
@@ -38,8 +39,11 @@ class Cgroup:
         if self.dummyProc is not None:
             self.dummyProc.kill()
             self.dummyProc.wait()
-
-        os.rmdir(self.fsPath)
+        try:
+            os.rmdir(self.fsPath)
+        except:
+            # The group was already cleaned up
+            pass
 
     @property
     def fsPath(self):
@@ -97,6 +101,7 @@ class Cgroup:
         dirPath = os.path.join(self.fsPath, name)
         os.mkdir(dirPath)
         group = Cgroup(path=groupPath)
+        group.enableControllers(controllers)
         try:
             yield group
         finally:
@@ -119,6 +124,10 @@ class Cgroup:
         s = self._readGroupfile("memory.stat")
         return {k: int(v) for k, v in s.items()}
 
+    def currentMemoryUsage(self):
+        with open(os.path.join(self.fsPath, "memory.current")) as f:
+            return int(f.read())
+
 class PodmanError(RuntimeError):
     def __init__(self, message, log):
         super().__init__(message)
@@ -126,9 +135,6 @@ class PodmanError(RuntimeError):
 
 def invokePodmanCommand(command, **kwargs):
     command = ["podman", "--cgroup-manager", "cgroupfs"] + command
-    if "inspect" not in command:
-        print(command)
-    # command = ["podman"] + command
     p = subprocess.run(command,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **kwargs)
     output = p.stdout.decode("utf-8")
@@ -149,7 +155,7 @@ def containerExists(name):
         capture_output=True)
     return p.returncode == 0
 
-def buildImage(dockerfile, tag, args, cpuLimit=None, memLimit=None):
+def buildImage(dockerfile, tag, args, cpuLimit=None, memLimit=None, noCache=False):
     """
     Build image for given dockerfile (string). Return the logs of the build.
     """
@@ -165,6 +171,8 @@ def buildImage(dockerfile, tag, args, cpuLimit=None, memLimit=None):
         if cpuLimit is not None:
             command.extend(["--cpu-period", "100000"])
             command.extend(["--cpu-quota", str(100000 * cpuLimit)])
+        if noCache:
+            command.append("--no-cache")
         command.extend(["-f", dockerfilePath])
         command.append(d)
 
@@ -175,7 +183,7 @@ def createContainer(image, command, mounts=[], cpuLimit=None, memLimit=None,
     """
     Create container, return its identifier
     """
-    podmanCmd = ["container", "create", "--runtime", "crun"]
+    podmanCmd = ["container", "create", "--runtime", RUNTIME]
     for m in mounts:
         podmanCmd.extend(["--mount", f"type=bind,src={m['source']},target={m['target']}"])
     if cpuLimit is not None:
@@ -195,7 +203,6 @@ def createContainer(image, command, mounts=[], cpuLimit=None, memLimit=None,
         r, w = os.pipe()
         pid = os.fork()
         if pid > 0:
-            print(f"Parent: {os.getpid()}")
             os.close(w)
             with os.fdopen(r) as r:
                 os.waitpid(pid, 0)
@@ -254,7 +261,7 @@ def containerLogs(container):
     command = ["logs", container]
     return invokePodmanCommand(command)
 
-def runAndWatch(container, cgroup, notify=None, wallClockLimit=None,
+def runAndWatch(container, cgroup, watchCgroup, notify=None, wallClockLimit=None,
             cpuClockLimit=None, pollInterval=1, notifyInterval=10):
     """
     Run a container and watch it for time limits. Returns a dictionary with
@@ -262,7 +269,7 @@ def runAndWatch(container, cgroup, notify=None, wallClockLimit=None,
     """
     inspection = inspectContainer(container)
 
-    command = ["container", "start", "--runtime", "crun", container]
+    command = ["container", "start", "--runtime", RUNTIME, container]
     if CGROUP_WORKAROUND:
         pid = os.fork()
         if pid > 0:
@@ -273,10 +280,10 @@ def runAndWatch(container, cgroup, notify=None, wallClockLimit=None,
             os._exit(0)
     else:
         invokePodmanCommand(command)
-    print("Container started")
 
     timeout = False
     ticks = 0
+    maxMemoryUsage = 0
     while True:
         time.sleep(pollInterval)
         ticks += 1
@@ -286,25 +293,23 @@ def runAndWatch(container, cgroup, notify=None, wallClockLimit=None,
         if containerStatus(inspection) != "running":
             break
         wTime = containerRunTime(inspection)
-        cTime = cgroup.cpuStats()["usage_usec"]
+        maxMemoryUsage = max(maxMemoryUsage, watchCgroup.currentMemoryUsage())
+        cTime = watchCgroup.cpuStats()["usage_usec"]
         if wTime >= wallClockLimit * 1000000 or cTime >= cpuClockLimit * 1000000:
             stopContainer(container, timeout=1)
             timeout = True
-    print("Container terminated")
 
     inspection = inspectContainer(container)
-    print("Before stats")
     stats = {
-        "cpuStat": cgroup.cpuStats(),
-        "memStat": cgroup.memoryStats(),
+        "cpuStat": watchCgroup.cpuStats(),
+        "memStat": watchCgroup.memoryStats(),
+        "maxMemory": maxMemoryUsage,
         "wallTime": containerRunTime(inspection),
         "exitCode": containerExitCode(inspection),
         "outOfMemory": containerOomKilled(inspection),
         "timeout": timeout,
         "output": containerLogs(container)
     }
-    print(stats)
-    print("After stats")
     return stats
 
 

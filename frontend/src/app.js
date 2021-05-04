@@ -14,7 +14,8 @@ function Container(props) {
 
 function Header(props) {
   return <div className="w-ful bg-blue-200 p-4">
-      <h1>Surveyor &mdash; benchmarking made simple</h1>
+      <img src="logo.svg" alt="" className="inline-block mr-6" style={{"width": "80px"}}/>
+      <h1 className="inline-block">Surveyor &mdash; benchmarking made simple</h1>
   </div>
 }
 

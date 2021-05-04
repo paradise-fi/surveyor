@@ -7,6 +7,7 @@ import hashlib
 import io
 import shlex
 import json
+import logging
 import subprocess
 import dateutil.parser
 from pathlib import Path
@@ -87,7 +88,6 @@ class EnvironmentManager:
         # cached
         m = hashlib.sha256()
         m.update(env.dockerfile.encode(encoding="UTF-8"))
-        return f"surveyor-env-{m.hexdigest()}"
         return f"surveyor-env-{env.id}-{m.hexdigest()[:8]}"
 
     def _isEnvAvailable(self, envName):
@@ -102,7 +102,8 @@ class EnvironmentManager:
         try:
             buildLog = podman.buildImage(dockerfile=env.dockerfile, tag=envName,
                 args={x.key: x.value for x in env.params},
-                cpuLimit=env.cpuLimit, memLimit=env.memoryLimit)
+                cpuLimit=env.cpuLimit, memLimit=env.memoryLimit,
+                noCache=True) # Force rebuilding the container when it downloads external dependencies
         except podman.PodmanError as e:
             raise EnvironmentBuildError(
                 f"Build of environment {env.id} ({env.description}) has failed with:\n{e.log}\n\n{e}")
@@ -139,6 +140,7 @@ class EnvironmentManager:
             if self._isEnvAvailable(envName):
                 return asFuture(envName)
             return self.getImage(self, env)
+        logging.info(f"Environment {env.id} not available, building it")
         return self.builder.submit(lambda: self._buildContainer(env))
 
 
@@ -194,29 +196,33 @@ def executeTask(task, imageName, parentCgroup):
     """
     dbSession = SignallingSession.object_session(task)
     with TemporaryDirectory() as d, parentCgroup.newGroup(f"task{task.id}") as cgroup:
-        print("Starting container...")
-        env = task.suite.env
-        buildOutput = "" if task.output is None else task.output
-        try:
-            container = podman.createContainer(
-                image=imageName, command=shlex.split(task.command),
-                mounts=[{
-                    "target": "/artefact",
-                    "source": d
-                }],
-                cpuLimit=env.cpuLimit, memLimit=env.memoryLimit,
-                cgroup=cgroup, name=createContainerName(task))
-            print("Container created")
-            def notify():
-                task.poke(podman.containerLogs(container))
-                dbSession.commit()
-            stats = podman.runAndWatch(
-                container, cgroup, notify, env.wallClockTimeLimit, env.cpuTimeLimit)
-        except podman.PodmanError as e:
-            raise TaskRunError(f"Cannot execute task: {e.log} \n\nCommand: {e}")
-        finally:
-            if container is not None:
-                podman.removeContainer(container)
+        logging.info(f"Starting container for task {task.id}")
+        # Create a separate cgroup in case OOM killer starts working
+        with cgroup.newGroup("benchmark", controllers=[]) as containerCgroup:
+            env = task.suite.env
+            buildOutput = "" if task.output is None else task.output
+            try:
+                container = podman.createContainer(
+                    image=imageName, command=shlex.split(task.command),
+                    mounts=[{
+                        "target": "/artefact",
+                        "source": d
+                    }],
+                    cpuLimit=env.cpuLimit, memLimit=env.memoryLimit,
+                    cgroup=containerCgroup, name=createContainerName(task))
+                logging.debug(f"Container created for task {task.id}")
+                def notify():
+                    task.poke(podman.containerLogs(container))
+                    dbSession.commit()
+                stats = podman.runAndWatch(
+                    container, containerCgroup, cgroup, notify,
+                    env.wallClockTimeLimit, env.cpuTimeLimit)
+            except podman.PodmanError as e:
+                logging.error(f"Cannot execute task {task.id}: {e.log} \n\nCommand: {e}")
+                raise TaskRunError(f"Cannot execute task: {e.log} \n\nCommand: {e}")
+            finally:
+                if container is not None:
+                    podman.removeContainer(container)
 
         exitcode = stats["exitCode"]
         dbStats = {
@@ -226,7 +232,8 @@ def executeTask(task, imageName, parentCgroup):
             "systemTime": stats["cpuStat"]["system_usec"],
             "outOfMemory": stats["outOfMemory"],
             "timeout": stats["timeout"],
-            "memUsage": stats["memStat"], # TBA
+            "memStat": stats["memStat"],
+            "memUsage": stats["maxMemory"],
             "artefactError": None
         }
         try:
@@ -254,7 +261,7 @@ def evaluateTask(taskId, envManager, cgroup):
             task.abandon()
             raise e
         finally:
-            print(f"Task {taskId} finished")
+            logging.info(f"Task {taskId} finished")
             dbSession.commit()
 
 @app.cli.command("run")
@@ -270,12 +277,15 @@ def run(cpulimit, memlimit, joblimit, id):
     """
     Run executor daemon
     """
+    logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
+
     cgroup = Cgroup.createScope("surveyor_runner")
     cgroup.enableControllers(["cpu", "memory", "io"])
 
     resources = ResourceManager(job=joblimit, cpu=cpulimit, mem=memlimit)
     envManager = EnvironmentManager()
     with envManager:
+        logging.info(f"Runner on {id} started")
         while True:
             if resources.availableResources["job"] == 0:
                 time.sleep(1)
@@ -285,13 +295,12 @@ def run(cpulimit, memlimit, joblimit, id):
                 resources.availableResources["mem"])
             if task is None:
                 db.session.commit()
-                print(f"No tasks available, sleeping")
                 time.sleep(1)
                 continue
-            print(f"Fetched new task {task.id}")
+            logging.info(f"Fetched new task for evaluation {task.id}")
             try:
                 task.acquire(id)
-                print(f"Task {task.id} acquired")
+                logging.info(f"Task {task.id} acquired")
                 db.session.commit()
             except:
                 db.session.rollback()
@@ -306,6 +315,7 @@ def run(cpulimit, memlimit, joblimit, id):
                     args=[task.id, envManager, cgroup])
                 t.start()
             except:
+                logging.error(f"Abandoning task {task.id}")
                 task.abandon()
                 db.session.commit()
                 resourcesHandle.__exit__(*sys.exc_info())

@@ -230,6 +230,7 @@ class TaskDetail extends EntityDetail {
                 <p>Exit code: {task.exitcode}</p>
                 <p>Wall-clock time: {timeLimitString(task.stats.wallTime / 1000000)}</p>
                 <p>Cpu-clock time: {timeLimitString(task.stats.cpuTime / 1000000)}</p>
+                <p>Consumed memory: {memLimitString(task.stats.memUsage)}</p>
                 <p>Exit code: {task.exitcode}</p>
             </div>
             <div className="w-full md:w-1/2">
