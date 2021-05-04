@@ -1,4 +1,5 @@
 [
     "countdown.sh 10",
-    "useCpu.sh 10 2"
+    "useCpu.sh 10 2",
+    "useMemory.sh 10 256M"
 ]
