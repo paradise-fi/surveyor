@@ -49,7 +49,7 @@ export function NewBenchmark(props) {
             alert(err.message);
             return;
         }
-        fetch('/api/suites', {
+        fetch(process.env.PUBLIC_URL + '/api/suites', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)

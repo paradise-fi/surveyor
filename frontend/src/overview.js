@@ -47,8 +47,8 @@ class DetailProxy {
     }
 }
 
-var SUITE_PROXY = new DetailProxy("/api/suites");
-var TASK_PROXY = new DetailProxy("/api/tasks");
+var SUITE_PROXY = new DetailProxy(process.env.PUBLIC_URL + "/api/suites");
+var TASK_PROXY = new DetailProxy(process.env.PUBLIC_URL + "/api/tasks");
 
 class ExpandableTableRow extends React.Component {
     constructor(props) {
@@ -435,7 +435,7 @@ export class Overview extends React.Component {
     }
 
     componentDidMount() {
-        fetch("/api/suites").then(response => {
+        fetch(process.env.PUBLIC_URL + "/api/suites").then(response => {
             if (!response.ok) {
                 throw new Error(response.statusText);
             }
