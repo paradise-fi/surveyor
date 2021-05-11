@@ -129,7 +129,7 @@ class EnvironmentManager:
             # Note that build might have failed
             if self._isEnvAvailable(envName):
                 return asFuture(envName)
-            return self.getImage(self, env)
+            return self.getImage(env)
         logging.info(f"Environment {env.id} not available, building it")
         return self.builder.submit(lambda: self._buildContainer(env))
 
