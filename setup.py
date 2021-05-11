@@ -31,7 +31,7 @@ setuptools.setup(
         "Flask-Migrate",
         "podman-py",
         "python-dateutil",
-        "dbus-python"
+        "psycopg2"
     ],
     entry_points = {
         "console_scripts": [

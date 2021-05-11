@@ -1,21 +1,15 @@
 import os
-import signal
 import json
 import time
 import subprocess
 import contextlib
 import dateutil.parser
 import datetime
-import dbus
 from tempfile import TemporaryDirectory
 
 # See https://github.com/containers/podman/issues/10173
 CGROUP_WORKAROUND = False
 RUNTIME = "runc"
-
-
-proxy = dbus.SystemBus().get_object("org.freedesktop.systemd1", "/org/freedesktop/systemd1")
-systemd = dbus.Interface(proxy, dbus_interface="org.freedesktop.systemd1.Manager")
 
 class Cgroup:
     def __init__(self, path=None):
