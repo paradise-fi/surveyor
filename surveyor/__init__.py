@@ -3,7 +3,11 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 
 app = Flask(__name__)
-app.config.from_envvar('SURVEYOR_CFG')
+try:
+    app.config.from_pyfile('configuration/default.py')
+except FileNotFoundError as e:
+    app.config.from_envvar('SURVEYOR_CFG')
+
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
