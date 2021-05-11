@@ -2,25 +2,15 @@ import click
 import os
 import multiprocessing
 import time
-import types
 import hashlib
-import io
 import shlex
 import json
 import logging
-import subprocess
-import dateutil.parser
-from pathlib import Path
-from subprocess import Popen, TimeoutExpired, PIPE
 from tempfile import TemporaryDirectory
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from contextlib import contextmanager
 from threading import Thread, Lock, RLock, Condition
-from datetime import datetime
 from flask_sqlalchemy import SignallingSession
-from podman import PodmanClient
-from podman.errors import BuildError, APIError
-from urllib3.exceptions import ReadTimeoutError
 from surveyor import app, db
 from surveyor.models import BenchmarkTask
 from surveyor.common import withCleanup, asFuture
