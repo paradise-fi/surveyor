@@ -1,0 +1,32 @@
+name: "Update component database"
+on:
+  push:
+  pull_request:
+jobs:
+  build_frontend:
+    name: "Build frontend"
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+              npm
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm install --silent
+          NODE_ENV=production PUBLIC_URL=${BASEURL} npm run build
+      - name: Tar artifact # Artifact are case insensitive, this is workaround
+        run: |
+          cd frontend
+          mv build frontend
+          tar -czf ../frontend_build.tar.gz frontend/
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: frontend_build
+          path: frontend_build.tar.gz
+          retention-days: 14
