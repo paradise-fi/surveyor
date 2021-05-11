@@ -55,6 +55,15 @@ class Cgroup:
             f.write(" ".join([f"+{x}" for x in controllers]))
 
     @staticmethod
+    def processGroup():
+        """
+        Get a handle for process cgroup
+        """
+        with open(f"/proc/{os.getpid()}/cgroup") as f:
+            path = f.read().split("::")[1].strip()
+        return Cgroup(path)
+
+    @staticmethod
     def createScope(scopeName):
         """
         Use systemd to create a new user cgroup scope. Put the current process

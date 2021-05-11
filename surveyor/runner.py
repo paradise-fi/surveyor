@@ -263,14 +263,19 @@ def evaluateTask(taskId, envManager, cgroup):
     help="Limit number of parallely executed tasks")
 @click.option("--id", "-i", type=str, default=os.uname().nodename,
     help="Identification of the runner")
-def run(cpulimit, memlimit, joblimit, id):
+@click.option("--scope/--no-scope", default="--scope",
+    help="Create dedicated scope or use scope/unit from systemd")
+def run(cpulimit, memlimit, joblimit, id, scope):
     """
     Run executor daemon
     """
     logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.INFO)
 
-    cgroup = Cgroup.createScope("surveyor_runner")
-    cgroup.enableControllers(["cpu", "memory", "io"])
+    if scope:
+        cgroup = Cgroup.createScope("surveyor_runner")
+        cgroup.enableControllers(["cpu", "memory", "io"])
+    else:
+        cgroup = Cgroup.processGroup()
 
     resources = ResourceManager(job=joblimit, cpu=cpulimit, mem=memlimit)
     envManager = EnvironmentManager()
