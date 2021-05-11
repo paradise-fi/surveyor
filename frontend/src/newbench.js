@@ -19,6 +19,7 @@ const LoadableTextArea = React.forwardRef((props, ref) => {
     return <>
         <input type="file" hidden ref={fileInput} onChange={onFileChange}/>
         <Button className="block w-full"
+                type="button"
                 onClick={() => fileInput.current.click() }>
             Upload from file
         </Button>
@@ -79,7 +80,7 @@ export function NewBenchmark(props) {
                       focus:ring-opacity-50`;
 
     return <div className="w-full p-2">
-        <form>
+        <form onSubmit="return false;">
             <div className="w-full border-black border-b-2">
                 <h1>General</h1>
                 <label className="block mb-4">
