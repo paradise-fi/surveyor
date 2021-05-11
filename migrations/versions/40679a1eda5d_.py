@@ -1,8 +1,8 @@
 """empty message
 
-Revision ID: c7cd9bceb708
+Revision ID: 40679a1eda5d
 Revises: 
-Create Date: 2021-04-27 09:54:45.753177
+Create Date: 2021-05-11 08:41:48.747903
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'c7cd9bceb708'
+revision = '40679a1eda5d'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -22,6 +22,7 @@ def upgrade():
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('created', sa.DateTime(), nullable=True),
     sa.Column('author', sa.String(length=50), nullable=True),
+    sa.Column('description', sa.Text(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('benchmark_task',
@@ -42,7 +43,6 @@ def upgrade():
     op.create_table('runtime_env',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('suite_id', sa.Integer(), nullable=False),
-    sa.Column('description', sa.Text(), nullable=True),
     sa.Column('dockerfile', sa.Text(), nullable=True),
     sa.Column('cpuLimit', sa.Integer(), nullable=True),
     sa.Column('memoryLimit', sa.Integer(), nullable=True),

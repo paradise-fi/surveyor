@@ -8,6 +8,7 @@ class BenchmarkSuite(db.Model):
     author = db.Column(db.String(50))
     env = db.relationship("RuntimeEnv", back_populates="suite", uselist=False)
     tasks = db.relationship("BenchmarkTask", back_populates="suite", lazy=False)
+    description = db.Column(db.Text)
 
     def completedTaskCount(self):
         return sum(x.state in [TaskState.evaluated, TaskState.cancelled] for x in self.tasks)
@@ -20,7 +21,6 @@ class RuntimeEnv(db.Model):
     suite_id = db.Column(db.Integer, db.ForeignKey("benchmark_suite.id"),
         nullable=False)
     suite = db.relationship("BenchmarkSuite", back_populates="env", uselist=False)
-    description = db.Column(db.Text)
     dockerfile = db.Column(db.Text)
     params = db.relationship("RuntimeParam", back_populates="env", lazy="joined")
     cpuLimit = db.Column(db.Integer)

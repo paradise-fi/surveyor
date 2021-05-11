@@ -10,7 +10,7 @@ def serializeSuiteOverview(suite):
         "taskCount": len(suite.tasks),
         "completedTaskCount": suite.completedTaskCount(),
         "assignedTaskCount": suite.assignedTaskCount(),
-        "description": suite.env.description # TBA migrate the field
+        "description": suite.description
     }
 
 def serializeSuiteDetail(suite):
@@ -22,7 +22,7 @@ def serializeSuiteDetail(suite):
 def serializeSuiteResults(suite):
     return {
         "id": suite.id,
-        "description": suite.env.description, # TBA migrate the field
+        "description": suite.description,
         "tasks": [serializeTaskResult(x) for x in suite.tasks]
     }
 
@@ -86,9 +86,8 @@ def new_suite():
     if data is None:
         return "Invalid data", 400
     try:
-        suite = BenchmarkSuite(author=username)
+        suite = BenchmarkSuite(author=username, description=data["description"],)
         suite.env = RuntimeEnv(
-            description=data["description"],
             dockerfile=data["dockerfile"],
             cpuTimeLimit=data["cputimelimit"],
             wallClockTimeLimit=data["walltimelimit"],

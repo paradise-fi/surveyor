@@ -56,9 +56,8 @@ def createSuite(dockerfile, param, tasks, cpulimit, memlimit, ctimeout, wtimeout
     """
     Specify new evaluation suite and start evaluating it.
     """
-    suite = BenchmarkSuite(author=getUsername())
+    suite = BenchmarkSuite(author=getUsername(), description=description)
     suite.env = RuntimeEnv(
-        description=description,
         dockerfile=dockerfile.read(),
         cpuTimeLimit=ctimeout,
         wallClockTimeLimit=wtimeout,

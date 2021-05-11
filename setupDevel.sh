@@ -1,4 +1,3 @@
-set -e
 
 source setupLocal.sh
 
