@@ -125,8 +125,8 @@ function BenchamarkEnv(props) {
             </tbody>
         </table>
         <Collapsible
-                trigger="Open environment definition&nbsp;∨"
-                triggerWhenOpen="Close environment definition&nbsp;∧"
+                trigger="Open environment definition&nbsp;▼"
+                triggerWhenOpen="Close environment definition&nbsp;▲"
                 transitionTime={100}
                 triggerClassName="cursor-pointer underline text-blue-500 hover:text-blue-800"
                 triggerOpenedClassName="cursor-pointer underline text-blue-500 hover:text-blue-800">
@@ -145,7 +145,7 @@ function SuiteStatistics(props) {
     let suite = props.suite;
     return <div className="w-full">
         <p>Status: {suiteResultText(suite)}</p>
-        <a href={"/api/suites/" + suite.id + "/results"} target="_blank" rel="noreferrer">
+        <a href={process.env.PUBLIC_URL + "/api/suites/" + suite.id + "/results"} target="_blank" rel="noreferrer">
             <Button className="w-full">
                 Download JSON summary of suite: {suite.id}
             </Button>
@@ -202,8 +202,8 @@ function TaskDetailField(props) {
     if (!props.content)
         content = "";
     return <Collapsible
-            trigger={"Open " + props.what + "∨"}
-            triggerWhenOpen={"Close " + props.what + "∧"}
+            trigger={"Open " + props.what + "▼"}
+            triggerWhenOpen={"Close " + props.what + "▲"}
             transitionTime={100}
             triggerClassName="cursor-pointer underline text-blue-500 hover:text-blue-800"
             triggerOpenedClassName="cursor-pointer underline text-blue-500 hover:text-blue-800">
@@ -234,7 +234,7 @@ class TaskDetail extends EntityDetail {
                 <p>Exit code: {task.exitcode}</p>
             </div>
             <div className="w-full md:w-1/2">
-                <a href={"/api/tasks/" + task.id} target="_blank" rel="noreferrer">
+                <a href={process.env.PUBLIC_URL + "/api/tasks/" + task.id} target="_blank" rel="noreferrer">
                     <Button className="w-full">
                         Download JSON summary of task {task.id}
                     </Button>
@@ -258,12 +258,13 @@ class TaskDetail extends EntityDetail {
 }
 
 function taskRowClass(task, index) {
+    // Let's be verbose to make purgeCSS happy
     let colorCoding = {
-        "created": ["gray", 100, 200],
-        "pending": ["gray", 100, 200],
-        "assigned": ["blue", 100, 200],
-        "success": ["green", 100, 200],
-        "fail": ["red", 100, 200]
+        "created": ["bg-gray-100", "bg-gray-200"],
+        "pending": ["bg-gray-100", "bg-gray-200"],
+        "assigned": ["bg-blue-100", "bg-blue-200"],
+        "success": ["bg-green-100", "bg-green-200"],
+        "fail": ["bg-red-100", "bg-red-200"]
     };
     let state = task.state;
     if (state === "cancelled")
@@ -275,20 +276,18 @@ function taskRowClass(task, index) {
             state = "fail";
     }
     let color = colorCoding[state];
-
-    let className = "";
-    className += "bg-" + color[0] + "-" + ((index % 2) === 0 ? color[1] : color[2]);
-    return className;
+    return color[index % 2];
 }
 
 function SuiteTasks(props) {
     let tasks = props.tasks;
 
     let header = [
+        <th style={{"width": "2em"}}></th>,
         <th className="w-1/12">ID</th>,
         <th className="w-1/12 text-left">State</th>,
-        <th className="w-1/12 text-left">Assignee</th>,
-        <th className="w-2/12 text-left">Last update</th>,
+        <th className="w-2/12 text-left">Assignee</th>,
+        <th className="w-3/12 text-left">Last update</th>,
         <th className="text-left">Command</th>
     ]
 
@@ -306,6 +305,7 @@ function SuiteTasks(props) {
                                 key={i}
                                 expandableContent={detail}
                                 className={taskRowClass(task, i)}>
+                            <td className={colClass + "text-center"}>▼</td>
                             <td className={colClass + "text-center"}>{task.id}</td>
                             <td className={colClass + "text-left"}>{task.state}</td>
                             <td className={colClass + "text-left"}>{task.assignee}</td>
@@ -376,6 +376,7 @@ function suiteResultText(suite) {
 
 function SuiteTable(props) {
     let header = [
+        <th style={{"width": "2em"}}></th>,
         <th className="w-1/12">ID</th>,
         <th className="text-left w-2/12">Created</th>,
         <th className="text-left w-1/12">Author</th>,
@@ -397,6 +398,7 @@ function SuiteTable(props) {
             }
             return (
                 <ExpandableTableRow key={i} expandableContent={detail} className={rowClass}>
+                    <td className={colClass + "text-center"}>▼</td>
                     <td className={colClass + "text-center"}>{suite.id}</td>
                     <td className={colClass}>{suite.created}</td>
                     <td className={colClass}>{suite.author}</td>
