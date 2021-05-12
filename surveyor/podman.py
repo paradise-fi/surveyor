@@ -5,11 +5,12 @@ import subprocess
 import contextlib
 import dateutil.parser
 import datetime
+import logging
 from tempfile import TemporaryDirectory
 
 # See https://github.com/containers/podman/issues/10173
 CGROUP_WORKAROUND = False
-RUNTIME = "runc"
+RUNTIME = "crun"
 
 class Cgroup:
     def __init__(self, path=None):
@@ -51,8 +52,15 @@ class Cgroup:
             f.write(str(pid) + "\n")
 
     def enableControllers(self, controllers):
-        with open(os.path.join(self.fsPath, "cgroup.subtree_control"), "w") as f:
-            f.write(" ".join([f"+{x}" for x in controllers]))
+        try:
+            with open(os.path.join(self.fsPath, "cgroup.subtree_control"), "w") as f:
+                f.write(" ".join([f"+{x}" for x in controllers]))
+        except FileNotFoundError as e:
+            logging.info(f"Attempt: {os.path.join(self.fsPath, 'cgroup.subtree_control')}")
+            logging.info(f"Exception: {e}")
+            logging.info(f"Filename {e.filename}, {e.strerror}, {e.errno}")
+            logging.info(f"{group.fsPath}")
+            raise
 
     @staticmethod
     def processGroup():
@@ -96,19 +104,30 @@ class Cgroup:
         return cgroup
 
     @contextlib.contextmanager
-    def newGroup(self, name, controllers=["cpu", "memory", "io"]):
+    def newGroup(self, name, controllers=["cpu", "memory"]):
         """
         Context manager for creating new sub-groups.
         """
         groupPath = os.path.join(self.path, name)
         dirPath = os.path.join(self.fsPath, name)
-        os.mkdir(dirPath)
-        group = Cgroup(path=groupPath)
-        group.enableControllers(controllers)
         try:
+            os.mkdir(dirPath)
+            group = Cgroup(path=groupPath)
+            group.enableControllers(controllers)
             yield group
         finally:
             group.release()
+
+    def moveIntoSubgroup(self, name):
+        """
+        Move current process into a subgroup
+        """
+        subPath = os.path.join(self.path, name)
+        subDirPath = os.path.join(self.fsPath, name)
+        os.mkdir(subDirPath)
+        subGroup = Cgroup(path=subPath)
+        subGroup.addProcess(os.getpid())
+        return subGroup
 
     def _readGroupfile(self, filename):
         with open(os.path.join(self.fsPath, filename)) as f:
@@ -138,12 +157,12 @@ class PodmanError(RuntimeError):
 
 def invokePodmanCommand(command, **kwargs):
     command = ["podman", "--cgroup-manager", "cgroupfs"] + command
-    p = subprocess.run(command,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **kwargs)
-    output = p.stdout.decode("utf-8")
+    p = subprocess.run(command, capture_output=True, **kwargs)
+    stdout = p.stdout.decode("utf-8")
+    stderr = p.stderr.decode("utf-8")
     if p.returncode != 0:
-        raise PodmanError(f"{' '.join(command)}", output)
-    return output
+        raise PodmanError(f"{' '.join(command)}", stdout + "\n" + stderr)
+    return stdout, stderr
 
 def imageExists(name):
     """
@@ -179,7 +198,7 @@ def buildImage(dockerfile, tag, args, cpuLimit=None, memLimit=None, noCache=Fals
         command.extend(["-f", dockerfilePath])
         command.append(d)
 
-        return invokePodmanCommand(command)
+        return invokePodmanCommand(command)[0]
 
 def createContainer(image, command, mounts=[], cpuLimit=None, memLimit=None,
                     cgroup=None, name=None):
@@ -215,16 +234,16 @@ def createContainer(image, command, mounts=[], cpuLimit=None, memLimit=None,
             os.close(r)
             cgroup.addProcess(pid)
             with os.fdopen(w, 'w') as w:
-                res = invokePodmanCommand(podmanCmd)
+                res = invokePodmanCommand(podmanCmd)[0]
                 w.write(res)
                 w.close()
                 os._exit(0)
     else:
-        return invokePodmanCommand(podmanCmd).strip()
+        return invokePodmanCommand(podmanCmd)[0].strip()
 
 def inspectContainer(container):
     command = ["inspect", container]
-    return json.loads(invokePodmanCommand(command))[0]
+    return json.loads(invokePodmanCommand(command)[0])[0]
 
 def containerRunTime(inspection):
     """
@@ -254,15 +273,15 @@ def stopContainer(container, timeout=None):
     command = ["stop", container]
     if timeout is not None:
         command.extend(["--timeout", str(timeout)])
-    return invokePodmanCommand(command)
+    return invokePodmanCommand(command)[0]
 
 def removeContainer(container):
     command = ["container", "rm", "-f", container]
-    return invokePodmanCommand(command)
+    return invokePodmanCommand(command)[0]
 
 def containerLogs(container):
     command = ["logs", container]
-    return invokePodmanCommand(command)
+    return invokePodmanCommand(command)[0]
 
 def runAndWatch(container, cgroup, watchCgroup, notify=None, wallClockLimit=None,
             cpuClockLimit=None, pollInterval=1, notifyInterval=10):

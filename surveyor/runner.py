@@ -94,9 +94,10 @@ class EnvironmentManager:
                 args={x.key: x.value for x in env.params},
                 cpuLimit=env.cpuLimit, memLimit=env.memoryLimit,
                 noCache=True) # Force rebuilding the container when it downloads external dependencies
+            logging.info(buildLog)
         except podman.PodmanError as e:
             raise EnvironmentBuildError(
-                f"Build of environment {env.id} ({env.description}) has failed with:\n{e.log}\n\n{e}")
+                f"Build of environment {env.id} has failed with:\n{e.log}\n\n{e}")
         finally:
             with self.mutex:
                 condition = self.buildInProgress[env.id]
@@ -191,6 +192,7 @@ def executeTask(task, imageName, parentCgroup):
         with cgroup.newGroup("benchmark", controllers=[]) as containerCgroup:
             env = task.suite.env
             buildOutput = "" if task.output is None else task.output
+            container = None
             try:
                 container = podman.createContainer(
                     image=imageName, command=shlex.split(task.command),
@@ -273,9 +275,10 @@ def run(cpulimit, memlimit, joblimit, id, scope):
 
     if scope:
         cgroup = Cgroup.createScope("surveyor_runner")
-        cgroup.enableControllers(["cpu", "memory", "io"])
     else:
         cgroup = Cgroup.processGroup()
+        cgroup.moveIntoSubgroup("manager")
+    cgroup.enableControllers(["cpu", "memory", "io"])
 
     resources = ResourceManager(job=joblimit, cpu=cpulimit, mem=memlimit)
     envManager = EnvironmentManager()
