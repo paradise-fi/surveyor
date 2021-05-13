@@ -243,7 +243,8 @@ class TaskDetail extends EntityDetail {
             <div className="w-full">
                 <TaskDetailField
                     what="standard output"
-                    content={task.output}/>
+                    content={task.output}
+                    language="text"/>
                 <TaskDetailField
                     what="statistics"
                     content={JSON.stringify(task.stats, null, 4)}
@@ -364,7 +365,6 @@ function suiteResultText(suite) {
             failCount += 1;
     }
 
-    console.log(totalCount, successCount, failCount)
     let prefix = failCount === 0 ? "✅" : "❌";
     if (successCount + failCount !== totalCount)
         return prefix + " In progress";

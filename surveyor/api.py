@@ -38,8 +38,14 @@ def serializeTask(task):
     }
 
 def serializeTaskDetail(task):
+    OUTPUT_LIMIT = 1024 * 1024
     t = serializeTask(task)
-    t["output"] = task.output
+    if len(task.output) > OUTPUT_LIMIT:
+        t["output"] = task.output[:OUTPUT_LIMIT]
+        t["outputTruncated"] = True
+    else:
+        t["output"] = task.output
+        t["outputTruncated"] = False
     t["stats"] = task.stats
     t["result"] = task.result
     return t
