@@ -169,6 +169,9 @@ def extractArtefact(path):
     except json.JSONDecodeError as e:
         with open(os.path.join(path, "results.json")) as f:
             raise ArtefactError(f"Ivanlid syntax: {e}.\n\nSource file:\n{f.read()}")
+    except Exception as e:
+        with open(os.path.join(path, "results.json")) as f:
+            raise ArtefactError(f"Artefact error: {e}.\n\nSource file:\n{f.read()}")
 
 def createContainerName(task):
     containerName = f"surveyor-task-{task.id}"
