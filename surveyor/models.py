@@ -58,6 +58,8 @@ class BenchmarkTask(db.Model):
 
     # Exit code of the benchmarking command
     exitcode = db.Column(db.Integer, default=None)
+    # Combination of stdout & stderr from the build phase
+    buildOutput = db.deferred(db.Column(db.Text, default=None))
     # Combination of stdout & stderr
     output = db.deferred(db.Column(db.Text, default=None))
     # Statistics collected by the runner
@@ -98,6 +100,14 @@ class BenchmarkTask(db.Model):
         self.assignedAt = None
         self.updatedAt = None
         self.assignee = None
+
+    def buildPoke(self, output):
+        """
+        Poke the task - notify the database that the task's runtime environment
+        is still being build, update its output.
+        """
+        self.updatedAt = datetime.utcnow()
+        self.buildOutput = output
 
     def poke(self, output):
         """

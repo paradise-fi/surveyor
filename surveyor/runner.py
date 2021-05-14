@@ -83,18 +83,22 @@ class EnvironmentManager:
     def _isEnvAvailable(self, envName):
         return podman.imageExists(f"localhost/{envName}")
 
-    def _buildContainer(self, env):
+    def _buildContainer(self, env, onNewBuildLog):
         """
         Build container for the given environment. Return container name and
         notify about completion via Condition.
+
+        If onNewBuildLog is passed, it gets the output line by line.
         """
         envName = self._envName(env)
         try:
             buildLog = podman.buildImage(dockerfile=env.dockerfile, tag=envName,
                 args={x.key: x.value for x in env.params},
                 cpuLimit=env.cpuLimit, memLimit=env.memoryLimit,
+                onOutput=onNewBuildLog,
                 noCache=True) # Force rebuilding the container when it downloads external dependencies
-            logging.info(buildLog)
+            if buildLog is not None:
+                logging.info(buildLog)
         except podman.PodmanError as e:
             raise EnvironmentBuildError(
                 f"Build of environment {env.id} has failed with:\n{e.log}\n\n{e}")
@@ -106,12 +110,14 @@ class EnvironmentManager:
                     condition.notify_all()
         return envName
 
-    def getImage(self, env):
+    def getImage(self, env, onNewBuildLog=None):
         """
         Return image name of an container for given BenchmarkEnvironment. The
         name is wrapped into a future as the container might be build. If
         corresponding container is not found, it is built. If the container
         cannot be built, raises EnvironmentBuildError via the future.
+
+        If onNewBuildLog is passed, it gets the output line by line.
         """
         envName = self._envName(env)
         buildInProgress = False
@@ -132,7 +138,7 @@ class EnvironmentManager:
                 return asFuture(envName)
             return self.getImage(env)
         logging.info(f"Environment {env.id} not available, building it")
-        return self.builder.submit(lambda: self._buildContainer(env))
+        return self.builder.submit(lambda: self._buildContainer(env, onNewBuildLog))
 
 
 @contextmanager
@@ -148,13 +154,22 @@ def obtainEnvironment(task, envManager):
     Return an image name for running given task. If needed, build one.
     """
     dbSession = SignallingSession.object_session(task)
-    envImageF = envManager.getImage(task.suite.env)
+    buildOutput = None
+    def updateOutput(x):
+        nonlocal buildOutput
+        if buildOutput is not None:
+            buildOutput += x
+        else:
+            buildOutput = x
+    envImageF = envManager.getImage(task.suite.env, updateOutput)
     while not envImageF.done():
         try:
-            return envImageF.result(timeout=20)
+            return envImageF.result(timeout=5)
         except TimeoutError:
-            task.poke(None)
+            task.buildPoke(buildOutput)
             dbSession.commit()
+    task.buildPoke(buildOutput)
+    dbSession.commit()
     return envImageF.result()
 
 def extractArtefact(path):
@@ -194,7 +209,6 @@ def executeTask(task, imageName, parentCgroup):
         # Create a separate cgroup in case OOM killer starts working
         with cgroup.newGroup("benchmark", controllers=[]) as containerCgroup:
             env = task.suite.env
-            buildOutput = "" if task.output is None else task.output
             container = None
             try:
                 container = podman.createContainer(
@@ -268,7 +282,7 @@ def evaluateTask(taskId, envManager, cgroup):
     help="Limit number of parallely executed tasks")
 @click.option("--id", "-i", type=str, default=os.uname().nodename,
     help="Identification of the runner")
-@click.option("--scope/--no-scope", default="--scope",
+@click.option("--scope/--no-scope", default=True,
     help="Create dedicated scope or use scope/unit from systemd")
 def run(cpulimit, memlimit, joblimit, id, scope):
     """

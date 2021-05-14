@@ -243,6 +243,10 @@ class TaskDetail extends EntityDetail {
             </div>
             <div className="w-full">
                 <TaskDetailField
+                    what="build output"
+                    content={task.buildOutput}
+                    language="text"/>
+                <TaskDetailField
                     what="standard output"
                     content={task.output}
                     language="text"/>

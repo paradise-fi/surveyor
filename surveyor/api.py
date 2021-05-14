@@ -46,6 +46,12 @@ def serializeTaskDetail(task):
     else:
         t["output"] = task.output
         t["outputTruncated"] = False
+    if task.buildOutput is not None and len(task.buildOutput) > OUTPUT_LIMIT:
+        t["buildOutput"] = task.buildOutput[:OUTPUT_LIMIT]
+        t["buildOutputTruncated"] = True
+    else:
+        t["buildOutput"] = task.buildOutput
+        t["buildOutputTruncated"] = False
     t["stats"] = task.stats
     t["result"] = task.result
     return t
@@ -57,6 +63,7 @@ def serializeTaskResult(task):
         "state": task.state.name,
         "assignee": task.assignee,
         "exitcode": task.exitcode,
+        "buildOutput": task.buildOutput,
         "output": task.output,
         "stats": task.stats,
         "result": task.result

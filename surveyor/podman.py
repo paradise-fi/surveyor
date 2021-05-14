@@ -155,14 +155,30 @@ class PodmanError(RuntimeError):
         super().__init__(message)
         self.log = log
 
+def podmanBaseCommand(command):
+    return ["podman", "--cgroup-manager", "cgroupfs", "--log-level", "error"] + command
+
 def invokePodmanCommand(command, **kwargs):
-    command = ["podman", "--cgroup-manager", "cgroupfs", "--log-level", "error"] + command
+    command = podmanBaseCommand(command)
     p = subprocess.run(command, capture_output=True, **kwargs)
     stdout = p.stdout.decode("utf-8")
     stderr = p.stderr.decode("utf-8")
     if p.returncode != 0:
         raise PodmanError(f"{' '.join(command)}", stdout + "\n" + stderr)
     return stdout, stderr
+
+def invokePodmanCommandPoll(command, output):
+    """
+    Invoke podman command and continuously output stdout and stderr via a callback
+    """
+    command = podmanBaseCommand(command)
+    p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    for line in iter(p.stdout.readline, b''):
+        output(line.decode("utf-8"))
+    output(p.stdout.read().decode("utf-8"))
+    exitcode = p.wait()
+    if exitcode != 0:
+        raise PodmanError(f"{' '.join(command)}")
 
 def imageExists(name):
     """
@@ -177,7 +193,7 @@ def containerExists(name):
         capture_output=True)
     return p.returncode == 0
 
-def buildImage(dockerfile, tag, args, cpuLimit=None, memLimit=None, noCache=False):
+def buildImage(dockerfile, tag, args, cpuLimit=None, memLimit=None, noCache=False, onOutput=None):
     """
     Build image for given dockerfile (string). Return the logs of the build.
     """
@@ -200,7 +216,10 @@ def buildImage(dockerfile, tag, args, cpuLimit=None, memLimit=None, noCache=Fals
         command.extend(["-f", dockerfilePath])
         command.append(d)
 
-        return invokePodmanCommand(command)[0]
+        if onOutput is not None:
+            return invokePodmanCommandPoll(command, onOutput)
+        else:
+            return invokePodmanCommand(command)[0]
 
 def createContainer(image, command, mounts=[], cpuLimit=None, memLimit=None,
                     cgroup=None, name=None):
