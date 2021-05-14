@@ -1,5 +1,5 @@
 from surveyor import db
-from datetime import datetime
+from datetime import datetime, timedelta
 import enum
 
 class BenchmarkSuite(db.Model):
@@ -7,7 +7,8 @@ class BenchmarkSuite(db.Model):
     created = db.Column(db.DateTime, default=datetime.utcnow)
     author = db.Column(db.String(50))
     env = db.relationship("RuntimeEnv", back_populates="suite", uselist=False)
-    tasks = db.relationship("BenchmarkTask", back_populates="suite", lazy=False)
+    tasks = db.relationship("BenchmarkTask",
+        back_populates="suite", lazy=False, order_by="asc(BenchmarkTask.id)")
     description = db.Column(db.Text)
 
     def completedTaskCount(self):
@@ -74,13 +75,25 @@ class BenchmarkTask(db.Model):
         """
         # TBA extend the query by tasks that are assigned, but haven't been
         # updated in a long time
-        tasks = (BenchmarkTask.query
-                    .filter_by(state=TaskState.pending)
+        baseQuery = (BenchmarkTask.query
+                    .join(BenchmarkTask.suite).join(BenchmarkSuite.env)
+                    .filter(RuntimeEnv.cpuLimit <= availableCores,
+                            RuntimeEnv.memoryLimit <= availableMemory))
+        task = (baseQuery
+                    .filter(BenchmarkTask.state == TaskState.pending)
                     .order_by(BenchmarkTask.id)
-                    .limit(1).all())
-        if len(tasks) == 0:
-            return None
-        return tasks[0]
+                    .limit(1).first())
+        if task:
+            return task
+        # Fetch tasks that are assigned, but haven't been updated for more than
+        # 5 minutes
+        t = datetime.utcnow() - timedelta(minutes=5)
+        task = (baseQuery
+                    .filter(BenchmarkTask.state == TaskState.assigned)
+                    .filter(BenchmarkTask.updatedAt <= t)
+                    .order_by(BenchmarkTask.id)
+                    .limit(1).first())
+        return task
 
     def acquire(self, assignee):
         """
