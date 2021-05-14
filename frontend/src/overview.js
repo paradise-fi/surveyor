@@ -211,6 +211,7 @@ function TaskDetailField(props) {
                 language={props.language}
                 style={docco}
                 showLineNumbers={true}
+                wrapLongLines={true}
                 className="text-sm">
             {content}
         </SyntaxHighlighter>
