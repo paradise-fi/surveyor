@@ -156,7 +156,7 @@ class PodmanError(RuntimeError):
         self.log = log
 
 def invokePodmanCommand(command, **kwargs):
-    command = ["podman", "--cgroup-manager", "cgroupfs"] + command
+    command = ["podman", "--cgroup-manager", "cgroupfs", "--log-level", "error"] + command
     p = subprocess.run(command, capture_output=True, **kwargs)
     stdout = p.stdout.decode("utf-8")
     stderr = p.stderr.decode("utf-8")
@@ -195,6 +195,8 @@ def buildImage(dockerfile, tag, args, cpuLimit=None, memLimit=None, noCache=Fals
             command.extend(["--cpu-quota", str(100000 * cpuLimit)])
         if noCache:
             command.append("--no-cache")
+        # Use docker format to support extensions like SHELL
+        command.extend(["--format", "docker"])
         command.extend(["-f", dockerfilePath])
         command.append(d)
 
