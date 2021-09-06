@@ -25,7 +25,7 @@ class RuntimeEnv(db.Model):
     dockerfile = db.Column(db.Text)
     params = db.relationship("RuntimeParam", back_populates="env", lazy="joined")
     cpuLimit = db.Column(db.Integer)
-    memoryLimit = db.Column(db.Integer)
+    memoryLimit = db.Column(db.BigInteger)
     cpuTimeLimit = db.Column(db.Integer)
     wallClockTimeLimit = db.Column(db.Integer)
 
