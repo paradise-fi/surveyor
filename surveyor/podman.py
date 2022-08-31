@@ -178,7 +178,7 @@ def invokePodmanCommandPoll(command, output):
     output(p.stdout.read().decode("utf-8"))
     exitcode = p.wait()
     if exitcode != 0:
-        raise PodmanError(f"{' '.join(command)}")
+        raise PodmanError(f"{' '.join(command)}", "")
 
 def imageExists(name):
     """
