@@ -12,10 +12,16 @@ class BenchmarkSuite(db.Model):
     description = db.Column(db.Text)
 
     def completedTaskCount(self):
-        return sum(x.state in [TaskState.evaluated, TaskState.cancelled] for x in self.tasks)
+        return db.session.query(BenchmarkTask) \
+            .filter(BenchmarkTask.suite_id == self.id,
+                    BenchmarkTask.state.in_([TaskState.evaluated, TaskState.cancelled])) \
+            .count()
 
     def assignedTaskCount(self):
-        return sum(x.state == TaskState.assigned for x in self.tasks)
+        return db.session.query(BenchmarkTask) \
+            .filter(BenchmarkTask.suite_id == self.id,
+                    BenchmarkTask.state == TaskState.assigned) \
+            .count()
 
 class RuntimeEnv(db.Model):
     id = db.Column(db.Integer, primary_key=True)
