@@ -130,6 +130,53 @@ def get_suite_results(id):
     suite = db.session.query(BenchmarkSuite).get_or_404(id)
     return serializeSuiteResults(suite)
 
+@app.route("/api/suites/<id>/pause", methods=["POST"])
+def pause_suite(id):
+    suite = db.session.query(BenchmarkSuite).get_or_404(id)
+    db.session.query(BenchmarkTask) \
+              .filter(BenchmarkTask.suite_id == id,
+                      BenchmarkTask.state == TaskState.pending) \
+        .update({"state": TaskState.created})
+    db.session.commit()
+    return {
+        "status": "ok"
+    }
+
+@app.route("/api/suites/<id>/resume", methods=["POST"])
+def resume_suite(id):
+    suite = db.session.query(BenchmarkSuite).get_or_404(id)
+    db.session.query(BenchmarkTask) \
+              .filter(BenchmarkTask.suite_id == id,
+                      BenchmarkTask.state == TaskState.created) \
+        .update({"state": TaskState.pending})
+    db.session.commit()
+    return {
+        "status": "ok"
+    }
+
+@app.route("/api/suites/<id>/delete", methods=["POST"])
+def delete_suite(id):
+    suite = db.session.query(BenchmarkSuite).get_or_404(id)
+
+    # We delete manually as we don't want to introduce a new migration
+    db.session.query(BenchmarkTask) \
+              .filter(BenchmarkTask.suite_id == id) \
+              .delete()
+    db.session.query(RuntimeParam) \
+              .filter(RuntimeParam.env_id == suite.env.id) \
+              .delete()
+    db.session.query(RuntimeEnv) \
+            .filter(RuntimeEnv.id == suite.env.id) \
+            .delete()
+    db.session.query(BenchmarkSuite) \
+            .filter(BenchmarkSuite.id == suite.id) \
+            .delete()
+    db.session.commit()
+    return {
+        "status": "ok"
+    }
+
+
 @app.route("/api/tasks/<id>")
 def get_task(id):
     task = db.session.query(BenchmarkTask).get_or_404(id)

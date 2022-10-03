@@ -7,6 +7,8 @@ import {
 } from "react-router-dom";
 import { Overview, SuitePage } from './overview'
 import { NewBenchmark } from './newbench'
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 function Container(props) {
   return <div className="container mx-auto px-2">{props.children}</div>
@@ -72,6 +74,7 @@ function App() {
                 </Switch>
                 <Footer/>
             </Container>
+            <ToastContainer />
         </Router>
     );
 }

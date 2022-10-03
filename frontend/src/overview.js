@@ -1,15 +1,17 @@
 import React from 'react'
+import { useState } from 'react';
 import produce from 'immer'
 import {
     Spinbox,
     Button,
     timeLimitString,
     memLimitString } from './components'
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useHistory } from "react-router-dom";
 import {getBrowserVisibilityProp, getIsDocumentHidden} from './visibility'
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { docco } from 'react-syntax-highlighter/dist/esm/styles/hljs';
 import Collapsible from 'react-collapsible';
+import { toast } from 'react-toastify';
 
 class DetailProxy {
     constructor(endpoint) {
@@ -141,15 +143,80 @@ function BenchamarkEnv(props) {
     </>
 }
 
+function ButtonWithAction(props) {
+    const [disabled, setDisabled] = useState(false);
+
+    const handleClick = () => {
+        setDisabled(true);
+        props.onClick().finally(() => {
+            setDisabled(false);
+        });
+    }
+
+    return <Button className={props.className} onClick={handleClick} disabled={disabled}>
+        {props.children}
+    </Button>
+}
+
 function SuiteStatistics(props) {
     let suite = props.suite;
+
+    let post = async function (url) {
+        let response = await fetch(url, {method: "POST"});
+        if (!response.ok) {
+            let text = await response.text();
+            throw new Error(`Not 2xx response ${text}`);
+        }
+        return response;
+    }
+
+    let handleDelete = () => {
+        return post(process.env.PUBLIC_URL + `/api/suites/${suite.id}/delete`)
+            .then(() => {
+                toast.success("Deleted");
+                props.onDelete();
+            })
+            .catch(e => {
+                toast.error("Error: " + e.toString());
+            });
+    };
+    let handlePause = () => {
+        return post(process.env.PUBLIC_URL + `/api/suites/${suite.id}/pause`)
+            .then(() => {
+                toast.success("Tasks paused");
+                props.onUpdate();
+            })
+            .catch(e => {
+                console.log(e);
+                toast.error("Error: " + e.toString());
+            });
+    };
+    let handleResume = () => {
+        return post(process.env.PUBLIC_URL + `/api/suites/${suite.id}/resume`)
+            .then(() => {
+                toast.success("Tasks resumed");
+                props.onUpdate();
+            })
+            .catch(e => {
+                toast.error("Error: " + e.toString());
+            });
+    };
     return <div className="w-full">
         <p>Status: {suiteResultText(suite)}</p>
         <a href={process.env.PUBLIC_URL + "/api/suites/" + suite.id + "/results"} target="_blank" rel="noreferrer">
-            <Button className="w-full">
+            <Button className="w-full my-1">
                 Download JSON summary of suite: {suite.id}
             </Button>
         </a>
+        <Button className="w-full my-1 bg-yellow-500 hover:bg-yellow-600" onClick={handlePause}>
+            Pause execution
+        </Button>
+        <Button className="w-full my-1 bg-green-500 hover:bg-green-600" onClick={handleResume}>
+            Resume execution
+        </Button>
+        <ButtonWithAction className="w-full my-1 bg-red-500 hover:bg-red-600" onClick={handleDelete}>
+            Delete task set
+        </ButtonWithAction>
     </div>
 }
 
@@ -346,7 +413,7 @@ class SuiteDetail extends EntityDetail {
                     <h4 className="text-xl mb-2">
                         Statistics
                     </h4>
-                    <SuiteStatistics suite={suite}/>
+                    <SuiteStatistics suite={suite} onDelete={this.props.onDelete} onUpdate={this.update}/>
                 </div>
             </div>
             <div className="w-full p-2 border-b-2 border-gray my-2">
@@ -380,6 +447,7 @@ function suiteResultText(suite) {
 }
 
 function SuiteTable(props) {
+    const [deleted, setDeleted] = useState([]);
     let header = [
         <th style={{"width": "2em"}}></th>,
         <th className="w-1/12">ID</th>,
@@ -392,7 +460,11 @@ function SuiteTable(props) {
     let tableBody;
     if (props.suites) {
         tableBody = props.suites.map((suite, i) => {
-            let detail = <SuiteDetail entityId={suite.id}/>
+            if (deleted.includes(suite.id))
+                return null;
+            let detail = <SuiteDetail entityId={suite.id} onDelete={() => {
+                setDeleted(deleted + [suite.id]);
+            }}/>
             let colClass = "py-2 ";
             let rowClass = "p-2 ";
             if ((i % 2) === 0) {
@@ -480,5 +552,6 @@ export class Overview extends React.Component {
 
 export function SuitePage() {
     let { entityId } = useParams();
-    return <SuiteDetail entityId={entityId}/>
+    let history = useHistory();
+    return <SuiteDetail entityId={entityId} onDelete={() => history.push("/")}/>
 }

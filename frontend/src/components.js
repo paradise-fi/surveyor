@@ -1,4 +1,5 @@
 import React from "react"
+import { twMerge } from 'tailwind-merge'
 
 export function Spinbox() {
     return <div className="w-full text-center">
@@ -66,7 +67,7 @@ export function memLimitString(bytes) {
 
 export function Button(props) {
     let {className, ...otherProps} = props;
-    return <button className={"bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed " + className}
+    return <button className={twMerge("bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed " + className)}
             {...otherProps}>
         {props.children}
     </button>

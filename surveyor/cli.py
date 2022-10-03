@@ -1,9 +1,11 @@
 from surveyor import app
+from surveyor.api import serializeSuiteResults
 from surveyor.models import *
 import click
 from flask.cli import FlaskGroup
 import os
 import pwd
+import sys
 import json
 
 class KeyVal(click.ParamType):
@@ -90,6 +92,15 @@ def runSuite():
     """
     raise NotImplementedError("Not implemented yet")
 
+@app.cli.command("results")
+@click.option("--id", "-i", type=int, required=True)
+def results(id):
+    """
+    Retrieve results for given task set
+    """
+    suite = db.session.query(BenchmarkSuite).get_or_404(id)
+    json.dump(serializeSuiteResults(suite), sys.stdout, indent=4)
+
 @click.group()
 def cli():
     """Surveyor CLI interface"""
@@ -97,6 +108,7 @@ def cli():
 
 cli.add_command(createSuite)
 cli.add_command(runSuite)
+cli.add_command(results)
 
 if __name__ == "__main__":
     cli()
