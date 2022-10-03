@@ -8,7 +8,7 @@ class BenchmarkSuite(db.Model):
     author = db.Column(db.String(50))
     env = db.relationship("RuntimeEnv", back_populates="suite", uselist=False)
     tasks = db.relationship("BenchmarkTask",
-        back_populates="suite", lazy=False, order_by="asc(BenchmarkTask.id)")
+        back_populates="suite", lazy=True, order_by="asc(BenchmarkTask.id)")
     description = db.Column(db.Text)
 
     def completedTaskCount(self):
@@ -21,6 +21,11 @@ class BenchmarkSuite(db.Model):
         return db.session.query(BenchmarkTask) \
             .filter(BenchmarkTask.suite_id == self.id,
                     BenchmarkTask.state == TaskState.assigned) \
+            .count()
+
+    def taskCount(self):
+        return db.session.query(BenchmarkTask) \
+            .filter(BenchmarkTask.suite_id == self.id) \
             .count()
 
 class RuntimeEnv(db.Model):

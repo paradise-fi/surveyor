@@ -7,7 +7,7 @@ def serializeSuiteOverview(suite):
         "id": suite.id,
         "created": suite.created,
         "author": suite.author,
-        "taskCount": len(suite.tasks),
+        "taskCount": suite.taskCount(),
         "completedTaskCount": suite.completedTaskCount(),
         "assignedTaskCount": suite.assignedTaskCount(),
         "description": suite.description
