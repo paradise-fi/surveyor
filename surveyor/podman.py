@@ -110,13 +110,15 @@ class Cgroup:
         """
         groupPath = os.path.join(self.path, name)
         dirPath = os.path.join(self.fsPath, name)
+        group = None
         try:
             os.mkdir(dirPath)
             group = Cgroup(path=groupPath)
             group.enableControllers(controllers)
             yield group
         finally:
-            group.release()
+            if group is not None:
+                group.release()
 
     def moveIntoSubgroup(self, name):
         """
@@ -339,7 +341,7 @@ def runAndWatch(container, cgroup, watchCgroup, notify=None, wallClockLimit=None
         maxMemoryUsage = max(maxMemoryUsage, watchCgroup.currentMemoryUsage())
         cTime = watchCgroup.cpuStats()["usage_usec"]
         if wTime >= wallClockLimit * 1000000 or cTime >= cpuClockLimit * 1000000:
-            stopContainer(container, timeout=1)
+            stopContainer(container, timeout=20)
             timeout = True
 
     inspection = inspectContainer(container)
