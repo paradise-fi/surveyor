@@ -18,7 +18,7 @@ and Surveyor takes care of the rest:
 - **Runtime environment** is the environment in which the individual tasks run.
   The environment is specified as a [Docker
   image](https://searchitoperations.techtarget.com/definition/Docker-image).
-  This allows you to install an arbitrary dependencies and provide the exactly same environment across various computers.
+  This allows you to install arbitrary dependencies and provide the exactly same environment across various computers.
 
 - **Benchmarking task** is a single command (string) executed in a runtime
   environment. This task is responsible for executing the actual result and possibly recording additional statistics about the run (e.g., number of explored states or progress over time).
@@ -129,7 +129,7 @@ CLI has not been implemented for that yet. You can see that all tasks have
 succeeded and you can download their artifacts.
 
 Now, try to execute the same task list, but limit the number of memory or cpu
-time. You will se that these benchmarks will fail.
+time. You will see that these benchmarks will fail.
 
 # Formal requirements for the tasks
 
@@ -137,7 +137,7 @@ In the previous text, we often referred to "artifact" but we haven't explained
 it. Let's fix it.
 
 Generally speaking, task is just a command you can execute inside the
-environment. Surveyor will take care of limiting and monitoring of the used
+environment. Surveyor will take care of limiting and monitoring the used
 resources (time and memory). However, this might not always be sufficient - you
 might be interested in collecting more detailed statistics - e.g., if a solution
 was found, how many states have been explored, etc. For this, the task can save
@@ -151,6 +151,6 @@ To sum it up:
 - Return value other than 0 should be used to indicate a fatal failure.
 - If you need to mark if your program solved a benchmark, we advise you to store
   this into the artefact.
-- The task can save `/artefact/result.json` to store an arbitrary,
+- The task can save `/artefact/results.json` to store an arbitrary,
   benchmark-defined information. The value is extracted after stopping it.
 
