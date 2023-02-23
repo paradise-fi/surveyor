@@ -304,7 +304,8 @@ def removeContainer(container):
 
 def containerLogs(container):
     command = ["logs", container]
-    return invokePodmanCommand(command)[0]
+    stdout, stderr = invokePodmanCommand(command)
+    return stdout + "\n" + stderr
 
 def runAndWatch(container, cgroup, watchCgroup, notify=None, wallClockLimit=None,
             cpuClockLimit=None, pollInterval=1, notifyInterval=10):
