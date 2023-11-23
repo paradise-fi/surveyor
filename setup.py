@@ -29,7 +29,6 @@ setuptools.setup(
         "Flask",
         "Flask-SQLAlchemy",
         "Flask-Migrate",
-        "podman-py",
         "python-dateutil",
         "psycopg2"
     ],
