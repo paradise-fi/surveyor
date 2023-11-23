@@ -186,7 +186,7 @@ def invokePodmanCommandPoll(command, output):
             break
     exitcode = p.wait()
     if exitcode != 0:
-        raise RuntimeError(f"{' '.join(command)}", "")
+        raise PodmanError(f"{' '.join(command)}", "")
 
 def imageExists(name):
     """
