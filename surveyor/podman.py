@@ -1,5 +1,6 @@
 import os
 import json
+import select
 import time
 import subprocess
 import contextlib
@@ -174,13 +175,18 @@ def invokePodmanCommandPoll(command, output):
     Invoke podman command and continuously output stdout and stderr via a callback
     """
     command = podmanBaseCommand(command)
-    p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    for line in iter(p.stdout.readline, b''):
-        output(line.decode("utf-8"))
-    output(p.stdout.read().decode("utf-8"))
+    p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    while True:
+        readable, _, _ = select.select([p.stdout, p.stderr], [], [], 0.1)
+        for file in readable:
+            line = file.readline().decode("utf-8")
+            output(line)
+        if p.poll() is not None:
+            break
     exitcode = p.wait()
     if exitcode != 0:
-        raise PodmanError(f"{' '.join(command)}", "")
+        raise RuntimeError(f"{' '.join(command)}", "")
 
 def imageExists(name):
     """
